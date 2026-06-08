@@ -1,0 +1,26 @@
+{
+  "$comment": "每篇论文精读后的结构化输出契约。category 用字符串（候选类目由 reader 提示词在运行时给出，不写死 enum，方便跨会议复用）。figure_* 由精读阶段填，是否真正配图由编者在 Step 5 决定。award/cat_note/figure_caption_zh 为组装期可选字段。",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "id":           {"type": "string", "description": "与 manifest 对应的论文 id，如 p01"},
+    "title":        {"type": "string"},
+    "team":         {"type": "string", "description": "作者机构/团队；识别不到写 未标注"},
+    "track":        {"type": "string", "description": "archival / non-archival"},
+    "category":     {"type": "string", "description": "从运行时给定的候选主线里选最贴切的一条，原文照填"},
+    "problem":      {"type": "string", "description": "要解决的问题，中文"},
+    "method":       {"type": "string", "description": "核心方法，中文，可分点"},
+    "key_results":  {"type": "string", "description": "关键结果/结论，中文，含具体数字"},
+    "limitations":  {"type": "string", "description": "局限/开放问题，中文；无则写 未报告"},
+    "relevance":    {"type": "string", "description": "对目标读者（如某产品方向）的相关度与启发，中文"},
+    "card_zh":      {"type": "string", "description": "一段话速查卡，120-180 字中文，独立可懂"},
+    "code_url":     {"type": "string", "description": "代码/项目页 URL；无则空字符串"},
+    "figure_essential": {"type": "boolean", "description": "是否确有一张原图能显著辅助理解（注意：模型倾向全标 true，最终是否配图由编者把关）"},
+    "figure_ref":   {"type": "string", "description": "如 Figure 2；无则空"},
+    "figure_caption": {"type": "string", "description": "该图标题原文起始句，用于定位；无则空"},
+    "figure_caption_zh": {"type": "string", "description": "组装期可选：中文图注"},
+    "award":        {"type": "string", "description": "组装期可选：如 🏆 最佳论文"},
+    "cat_note":     {"type": "string", "description": "组装期可选：归类说明（如 归入本类从宽）"}
+  },
+  "required": ["id", "title", "category", "problem", "method", "key_results", "relevance", "card_zh", "figure_essential"]
+}

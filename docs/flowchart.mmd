@@ -1,0 +1,71 @@
+flowchart TD
+  %% ===== 起止 / 数据存储节点 =====
+  START(["开始"])
+  DS1[("产物① txt/*.txt ×22 · fig/* · failed.txt")]
+  DS2[("产物② digests.json ×22")]
+  DS3[("产物③ sections ×5 + 头尾")]
+  OUT[("成品 vwm_cvpr2026_review.html 单文件可离线")]
+  ENDN(["结束"])
+
+  %% ===== 第 0 段：本地预处理（无模型） =====
+  subgraph P0["第 0 段 · 本地预处理 — 无模型(Bash/CLI) · 约 0 token"]
+    direction TB
+    P0a["P0a 读取 urls.tsv (22 行: 本地路径+URL)"] --> P0b{{"P0b FORK 并行下载 xargs -P8 curl -sL"}}
+    P0b --> P0c{"P0c PDF 有效? file=PDF 且 大于50KB"}
+    P0c -->|"否"| P0d["P0d 记入 failed.txt + 标注 需手工修URL"]
+    P0c -->|"是"| P0e["P0e pdftotext -layout 转 txt/pNN.txt"]
+    P0e --> P0f["P0f pdftoppm -r150 / pdfimages 抽 fig/"]
+  end
+
+  %% ===== 第 1 段：并行精读（Sonnet） =====
+  subgraph P1["第 1 段 · 并行精读 — Sonnet · 并发 8 (约3波) · 约 800k token"]
+    direction TB
+    FORK1{{"FORK1 扇出 22 篇 (+1 恢复 agent)"}}
+    FORK1 --> R1["R1 阅读 agent#N: Read(txt/pNN.txt)"] --> Rchk{"Rchk 正文可用? 大于2KB"}
+    Rchk -->|"是"| Rdig["Rdig 产出 DIGEST_SCHEMA (10 字段)"]
+    Rdig --> Rval{"Rval schema 校验?"}
+    Rval -->|"否 自动重试 ≤3"| Rdig
+    Rval -->|"是"| JOIN1{{"JOIN1 收齐 22 条 digest"}}
+    Rchk -->|"否/空"| REC["REC 恢复 agent: WebSearch arXiv/Scholar"]
+    FORK1 -.->|"5 篇撤稿"| REC
+    REC --> RECchk{"RECchk 找到全文?"}
+    RECchk -->|"是"| Rdig
+    RECchk -->|"否"| RECm["RECm 标注 仅据标题推断"] --> JOIN1
+  end
+
+  %% ===== 第 2 段：主题综合 + 查漏循环（Sonnet/Opus） =====
+  subgraph P2["第 2 段 · 主题综合 + 查漏循环 — Sonnet/Opus · 约 130k token"]
+    direction TB
+    GRP["GRP 按 theme 分 5 桶 (确定性)"] --> FORK2{{"FORK2 扇出 5 主题写手"}}
+    FORK2 --> W["W 写手#k 产出 综述节k"] --> JOIN2{{"JOIN2 收齐 5 节"}}
+    JOIN2 --> CRIT["CRIT 查漏 critic: 读 22 digest + 5 节"]
+    CRIT --> CRITq{"CRITq 有遗漏/归错类/结论未落地?"}
+    CRITq -->|"否"| DONE2["DONE2 5 节定稿 + 头尾综述"]
+    CRITq -->|"是"| LOOPq{"LOOPq round 小于 2?"}
+    LOOPq -->|"否 封顶"| DONE2
+  end
+
+  %% ===== 第 3 段：组装（Opus 主循环，确定性） =====
+  subgraph P3["第 3 段 · 组装成品 — 主循环 Opus(确定性) · 约 120k token"]
+    direction TB
+    A0["A0 合并 digests + sections"]
+    A0 --> A1["A1 22 digest 转 HTML 总表"]
+    A0 --> A2["A2 22 digest 转 22 速查卡 + 配图"]
+    A0 --> A3["A3 5 节+头尾 转 综述 HTML"]
+    A1 --> A4["A4 python 图片 base64 内联"]
+    A2 --> A4
+    A3 --> A4
+  end
+
+  %% ===== 跨阶段主干 + 循环回流 =====
+  START --> P0a
+  P0f --> DS1
+  P0d --> DS1
+  DS1 --> FORK1
+  JOIN1 --> DS2
+  DS2 --> GRP
+  DONE2 --> DS3
+  DS3 --> A0
+  A4 --> OUT
+  OUT --> ENDN
+  LOOPq -->|"是 round++ 回流补读"| FORK1
