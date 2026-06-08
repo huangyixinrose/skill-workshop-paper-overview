@@ -12,9 +12,9 @@
 
 ## 设计哲学
 
-**能用脚本做的不交给模型。**
+**用 Claude Code 指挥一条多智能体 workflow。** 主 agent（Claude Code）负责编排整条流水线：扇出多个子agent 并行精读每篇论文，再由主线写手子agent 与查漏 critic 子agent 协作完成综述，最后由编者（主 agent）撰写卷首并组装终稿。你只需给出一个 URL，Claude Code 就会搭建并运行这条多智能体流水线，全程自动调度。
 
-整条流水线只在 4 处调用 LLM：侦察主页提取论文清单、精读每篇论文、撰写主线综述与查漏、编者写卷首判断。其余环节（下载、抽文本、分组、抠图、渲染 HTML）全由确定性脚本完成。这让产出结构每次一致，可横向比较多个会议。
+**能用脚本做的不交给模型。** 整条流水线只在 4 处调用 LLM：侦察主页提取论文清单、精读每篇论文、撰写主线综述与查漏、编者写卷首判断。其余环节（下载、抽文本、分组、抠图、渲染 HTML）全由确定性脚本完成。这让产出结构每次一致，可横向比较多个会议。
 
 ## 流水线概览
 
@@ -77,7 +77,7 @@
 
 ## 依赖
 
-- **Claude Code**（运行时 harness）
+- **Claude Code**（运行环境）
 - **poppler**（提供 `pdftotext`、`pdftoppm`、`pdfinfo`；macOS: `brew install poppler`）
 - **Python + Pillow**（`pip install Pillow`）
 - **模型分档**：精读 / 综述 / 查漏用便宜模型（Sonnet / Haiku），卷首 / 配图用强模型（Opus）
@@ -106,17 +106,11 @@ examples/
   cvpr2026-video-world-model.html         # 样例成品
 ```
 
-## 已知边界
-
-- **侦察是最脆弱的环节。** 各家主页格式差异大（CVF / arXiv / OpenReview / 站内相对链接等），解析不了就退回让用户手工贴论文链接清单。
-- **撤稿 / 未公开全文的论文**走 recovery 子代理检索预印本，找不到则按标题给推断摘要并明确标注。
-- **配图需要"看图定框"，** 由 agent 视觉介入（locate -> render -> 查看定框 -> crop），只为少数确有助于理解的架构/流程图做。
-
 ## 独立部署（脱离 Claude Code）
 
 想把它做成不依赖 Claude Code 的独立程序：
 
-- 把 `workflow/` 的编排替换为 **Claude Agent SDK** 的子代理调用
+- 把 `workflow/` 的编排替换为 **Claude Agent SDK** 的子agent调用
 - `scripts/`、`prompts/`、`schemas/` 原样复用
 - 加一个 `cli.py` 入口
 
