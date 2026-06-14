@@ -7,12 +7,14 @@
     digests.json   list[digest]（见 schemas/digest.schema.json）
     sections.json  list[str]，顺序与 cats.json 对齐
     cats.json      list[str]，主线类目（决定分组与顺序）
+    crosscut.json  议题×论文对照矩阵 + 共性问题 + 中心论文 + 研究空白（可空）
     recovery.txt   缺失论文检索结果（markdown 文本，可空）
     preface.html   编者"整体判断"HTML 片段（卷首）
     meta.json      {"title","subtitle","note"}（缺省有兜底）
 {workdir}/figures/fig_<id>.png  存在则嵌入对应卡片（base64）
 
 产出 {workdir}/report.html （单文件，图以 base64 内联，可离线）
+版块顺序：整体判断 → 分类总表 → 主线综述 → 议题×论文对照 → 逐篇速查卡 → 缺失论文
 """
 import argparse, json, pathlib, re, html, base64
 
@@ -53,6 +55,55 @@ def md(text):
     return "\n".join(out)
 
 
+def render_crosscut(cc, id2title):
+    """渲染"议题×论文对照 + 共性问题"版块。cc 为 None/空则返回空串（版块省略）。
+    定位：这是给人的批判性核查清单——系统性扫描出的候选与线索，深度判断由人读原文完成。"""
+    if not cc:
+        return ""
+    def chips(ids):
+        return " ".join(f'<span class="pid" title="{esc(id2title.get(i,""))}">{esc(i)}</span>'
+                        for i in (ids or []))
+    p = ['<h2 id="crosscut">议题 × 论文 对照 · 共性问题（待人核查）</h2>',
+         '<div class="crosscut">',
+         '<div class="cc-note">下面是对全部论文做的<strong>系统性对照扫描</strong>：候选议题、共性问题、建议优先精读的论文与研究空白。'
+         '<strong>这些是供你定位与核查的线索，不是定论；深度的批判判断请回到原文自行完成。</strong></div>']
+    cps = cc.get("common_problems") or []
+    if cps:
+        p.append('<h3>共性问题（多篇共同触及的痛点 / 未解问题）</h3><ul class="cc-list">')
+        for x in cps:
+            p.append(f'<li><b>{esc(x.get("problem",""))}</b>　{chips(x.get("papers"))}'
+                     f'<br><span class="cc-why">{esc(x.get("why",""))}</span></li>')
+        p.append('</ul>')
+    cen = cc.get("central_papers") or []
+    if cen:
+        p.append('<h3>建议优先二次深读（覆盖议题最多 / 最具基础性）</h3><ul class="cc-list">')
+        for x in cen:
+            t = id2title.get(x.get("id", ""), "")
+            tags = "、".join(x.get("issues") or [])
+            p.append(f'<li><b>{esc(x.get("id",""))} {esc(t[:64])}</b>'
+                     f'{f"　<span class=cc-tags>{esc(tags)}</span>" if tags else ""}'
+                     f'<br><span class="cc-why">{esc(x.get("why",""))}</span></li>')
+        p.append('</ul>')
+    ws = cc.get("white_space") or []
+    if ws:
+        p.append('<h3>研究空白 / 少有人触及的方向</h3><ul class="cc-list">')
+        for x in ws:
+            p.append(f'<li><b>{esc(x.get("gap",""))}</b> <span class="cc-why">{esc(x.get("note",""))}</span></li>')
+        p.append('</ul>')
+    iss = cc.get("issues") or []
+    if iss:
+        p.append('<h3>议题 × 论文 对照矩阵</h3><div class="tblwrap">'
+                 '<table><thead><tr><th>议题</th><th>涉及论文</th><th>备注</th></tr></thead><tbody>')
+        for x in iss:
+            p.append(f'<tr><td><b>{esc(x.get("name",""))}</b></td>'
+                     f'<td>{chips(x.get("papers"))}</td><td>{esc(x.get("note",""))}</td></tr>')
+        p.append('</tbody></table></div>')
+    if cc.get("human_note"):
+        p.append(f'<div class="cc-note">{esc(cc.get("human_note"))}</div>')
+    p.append('</div>')
+    return "\n".join(p)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--workdir", required=True)
@@ -62,12 +113,14 @@ def main():
     digests = json.loads((D / "digests.json").read_text())
     sections = json.loads((D / "sections.json").read_text()) if (D / "sections.json").exists() else []
     cats = json.loads((D / "cats.json").read_text())
+    crosscut = json.loads((D / "crosscut.json").read_text()) if (D / "crosscut.json").exists() else None
     recovery = (D / "recovery.txt").read_text() if (D / "recovery.txt").exists() else ""
     preface = (D / "preface.html").read_text() if (D / "preface.html").exists() else "<p>（未提供整体判断）</p>"
     meta = json.loads((D / "meta.json").read_text()) if (D / "meta.json").exists() else {}
     title = meta.get("title", "Workshop 论文综述")
     subtitle = meta.get("subtitle", "")
     note = meta.get("note", "")
+    id2title = {d["id"]: d.get("title", "") for d in digests}
 
     def img_data(pid):
         p = wd / "figures" / f"fig_{pid}.png"
@@ -98,6 +151,16 @@ def main():
         tbl.append("</tbody></table>")
     tbl.append("</div>")
 
+    # ---- 综述 ----
+    syn = []
+    for ci, c in enumerate(cats):
+        sec = sections[ci] if ci < len(sections) else ""
+        if not sec: continue
+        syn.append(f'<div class="synthblock" id="syn{ci}"><div class="synthtag">主线{NUM[ci]}</div>{md(sec)}</div>')
+
+    # ---- 议题×论文对照 ----
+    crosscut_html = render_crosscut(crosscut, id2title)
+
     # ---- 卡片 ----
     cards = []
     for ci, c in enumerate(cats):
@@ -116,6 +179,10 @@ def main():
             codeblk = (f'<div class="detail"><span class="k">代码/主页</span>'
                        f'<div class="v"><a href="{esc(code)}">{esc(code)}</a></div></div>') if code else ""
             note_blk = f'<div class="note">{esc(d["cat_note"])}</div>' if d.get("cat_note") else ""
+            fc = (d.get("future_calls") or "").strip()
+            fc_html = f'　<i>未来工作呼吁：{esc(fc)}</i>' if fc and fc != "无" else ""
+            appr = (f'<div class="detail appr"><span class="k">批判核查提示（待人核实）</span>'
+                    f'<div class="v">{esc(d.get("appraisal",""))}{fc_html}</div></div>') if d.get("appraisal") else ""
             cards.append(f'''<div class="card" id="{esc(pid)}">
   <div class="chd"><span class="cno">{esc(pid)}</span><span class="ctitle">{esc(d["title"])}</span>{award}</div>
   <div class="badges"><span class="b track">{esc(d.get("track",""))}</span><span class="b team">{esc(d.get("team","未标注"))}</span></div>
@@ -127,15 +194,9 @@ def main():
   <div class="detail"><span class="k">关键结果</span><div class="v">{esc(d.get("key_results",""))}</div></div>
   <div class="detail"><span class="k">局限</span><div class="v">{esc(d.get("limitations","未报告"))}</div></div>
   <div class="detail rel"><span class="k">相关度与启发</span><div class="v">{esc(d.get("relevance",""))}</div></div>
+  {appr}
   {codeblk}
 </div>''')
-
-    # ---- 综述 ----
-    syn = []
-    for ci, c in enumerate(cats):
-        sec = sections[ci] if ci < len(sections) else ""
-        if not sec: continue
-        syn.append(f'<div class="synthblock" id="syn{ci}"><div class="synthtag">主线{NUM[ci]}</div>{md(sec)}</div>')
 
     recover_html = f'<h2 id="recover">未公开全文 / 缺失论文（检索兜底）</h2><div class="recover">{md(recovery)}</div>' if recovery.strip() else ""
 
@@ -144,13 +205,15 @@ def main():
               .replace("__NOTE__", esc(note))
               .replace("__PREFACE__", preface)
               .replace("__TABLES__", "\n".join(tbl))
-              .replace("__CARDS__", "\n".join(cards))
               .replace("__SECTIONS__", "\n".join(syn))
+              .replace("__CROSSCUT__", crosscut_html)
+              .replace("__CARDS__", "\n".join(cards))
               .replace("__RECOVER__", recover_html))
     outp = wd / "report.html"
     outp.write_text(out)
     print(f"成品: {outp} | {len(out)//1024} KB | 论文 {len(digests)} 篇 | "
-          f"配图 {sum(1 for d in digests if img_data(d['id']))} 张")
+          f"配图 {sum(1 for d in digests if img_data(d['id']))} 张 | "
+          f"议题对照 {'有' if crosscut_html else '无'}")
 
 
 TPL = '''<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
@@ -191,11 +254,17 @@ figcaption{font-size:12px;color:var(--muted);margin-top:6px}
 .cardzh{background:var(--hl);border:1px solid var(--hlbd);border-radius:10px;padding:12px 15px;font-size:14.5px;margin-bottom:14px}
 .detail{margin:10px 0}.detail .k{font-weight:700;color:var(--accent2);font-size:13.5px}.detail .v{font-size:14px;margin-top:2px}
 .detail.rel .k{color:var(--accent)}.detail.rel .v{background:#f3f8f6;border-radius:8px;padding:8px 12px}
+.detail.appr .k{color:#9a3f3f}.detail.appr .v{background:#fdf3f0;border-radius:8px;padding:8px 12px}
 .note{font-size:12.5px;color:var(--muted);background:#faf6ee;border-left:3px solid var(--hlbd);padding:6px 10px;border-radius:4px;margin:8px 0}
 .detail .v a{color:var(--accent);word-break:break-all}
 .synthblock{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 24px;margin:16px 0;position:relative}
 .synthtag{position:absolute;top:-10px;left:18px;background:var(--accent);color:#fff;font-size:12px;padding:2px 10px;border-radius:10px}
 .synthblock h3{color:var(--accent);margin-top:8px}.synthblock hr{border:none;border-top:1px dashed var(--line);margin:16px 0}
+.crosscut{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px}
+.cc-note{background:#fff7e8;border:1px solid var(--hlbd);border-radius:8px;padding:10px 14px;font-size:13.5px;color:#6b5a2a;margin:10px 0}
+.cc-list{padding-left:20px}.cc-list li{margin:9px 0}
+.cc-why{color:var(--muted);font-size:13px}.cc-tags{color:var(--accent2);font-size:12.5px}
+.pid{display:inline-block;background:#eef0ee;color:#555;border-radius:5px;padding:1px 6px;font-size:11.5px;font-family:ui-monospace,Menlo,monospace;margin:1px}
 .recover{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 22px}
 a{color:var(--accent)}
 </style></head><body><div class="wrap">
@@ -206,10 +275,11 @@ a{color:var(--accent)}
 <div class="preface">__PREFACE__</div>
 <h2 id="tables">分类总表</h2>
 __TABLES__
-<h2 id="cards">逐篇速查卡</h2>
-__CARDS__
 <h2 id="synth">主线综述</h2>
 __SECTIONS__
+__CROSSCUT__
+<h2 id="cards">逐篇速查卡</h2>
+__CARDS__
 __RECOVER__
 </div></body></html>'''
 

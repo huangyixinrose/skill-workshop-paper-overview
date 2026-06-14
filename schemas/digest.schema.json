@@ -1,5 +1,5 @@
 {
-  "$comment": "每篇论文精读后的结构化输出契约。category 用字符串（候选类目由 reader 提示词在运行时给出，不写死 enum，方便跨会议复用）。figure_* 由精读阶段填，是否真正配图由编者在 Step 5 决定。award/cat_note/figure_caption_zh 为组装期可选字段。",
+  "$comment": "每篇论文精读后的结构化输出契约。category 用字符串（候选类目由 reader 提示词在运行时给出，不写死 enum，方便跨会议复用）。figure_* 由精读阶段填，是否真正配图由编者在配图阶段决定。appraisal/future_calls 是批判性核查提示，供人核实、非定论（深度判断由人读原文完成）。award/cat_note/figure_caption_zh 为组装期可选字段。",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -13,6 +13,8 @@
     "key_results":  {"type": "string", "description": "关键结果/结论，中文，含具体数字"},
     "limitations":  {"type": "string", "description": "局限/开放问题，中文；无则写 未报告"},
     "relevance":    {"type": "string", "description": "对目标读者（如某产品方向）的相关度与启发，中文"},
+    "appraisal":    {"type": "string", "description": "批判性核查提示（供人核实，非定论）：按该工作自身范式看证据是否扎实；核心构念/指标是否清晰、是否与同领域一致；有何隐含前提。无明显问题写 未见明显问题"},
+    "future_calls": {"type": "string", "description": "论文自陈的局限或对未来工作的呼吁（现成的研究 gap 候选）；无则写 无"},
     "card_zh":      {"type": "string", "description": "一段话速查卡，120-180 字中文，独立可懂"},
     "code_url":     {"type": "string", "description": "代码/项目页 URL；无则空字符串"},
     "figure_essential": {"type": "boolean", "description": "是否确有一张原图能显著辅助理解（注意：模型倾向全标 true，最终是否配图由编者把关）"},

@@ -25,7 +25,7 @@
 - **CVF openaccess**：详情页 `…/html/<STEM>_paper.html` ⇒ PDF 是 `…/papers/<STEM>_paper.pdf`（STEM 必须逐字一致；个别论文 PDF 可能尚未上线，会 404）。
 - **arXiv**：用 `https://arxiv.org/pdf/<id>`。
 - **OpenReview**：用 `…/pdf?id=<id>`。
-- **无全文/撤稿**：不放进 manifest，放进 `data/missing.json`（只留 title），交给 recovery 子代理检索。
+- **无全文/撤稿**：不放进 manifest，放进 `data/missing.json`（只留 title），交给 recovery 子agent检索。
 
 ---
 
